@@ -17,5 +17,6 @@
             "memory_backend": "local",
             "scraper": "bs",
             "max_search_results_per_query": 1,
-            "max_iterations": 1
+            "max_iterations": 1,
+            "total_words": 3000
 }

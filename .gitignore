@@ -2,6 +2,7 @@
 .env
 .venv
 .envrc
+.env.bak
 
 #Ignore Virtual Env
 env/
