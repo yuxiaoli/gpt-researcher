@@ -196,7 +196,7 @@ async def summarize_url(query, raw_data, agent_role_prompt, cfg):
 
 
 
-async def generate_report(query, context, agent_role_prompt, report_type, websocket, cfg):
+async def generate_report(query, context: list, agent_role_prompt, report_type, websocket, cfg):
     """
     generates the final report
     Args:
@@ -212,13 +212,16 @@ async def generate_report(query, context, agent_role_prompt, report_type, websoc
 
     """
     generate_prompt = get_report_by_type(report_type)
+    user_prompt = f"{generate_prompt(query, context, cfg.report_format, cfg.total_words)}"
+    print("=" * 100)
+    print(user_prompt)
     report = ""
     try:
         report = await create_chat_completion(
             model=cfg.smart_llm_model,
             messages=[
                 {"role": "system", "content": f"{agent_role_prompt}"},
-                {"role": "user", "content": f"{generate_prompt(query, context, cfg.report_format, cfg.total_words)}"}],
+                {"role": "user", "content": user_prompt}],
             temperature=0,
             llm_provider=cfg.llm_provider,
             stream=True,

@@ -5,11 +5,31 @@ from gpt_researcher.master.functions import *
 from gpt_researcher.context.compression import ContextCompressor
 from gpt_researcher.memory import Memory
 
+from langchain_text_splitters import TokenTextSplitter
+from langchain.callbacks import get_openai_callback
+import tiktoken
+def count_tokens(string: str) -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.get_encoding("cl100k_base")
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+import random
+
+
 class GPTResearcher:
     """
     GPT Researcher
     """
-    def __init__(self, query, report_type="research_report", source_urls=None, config_path=None, websocket=None):
+    def __init__(
+        self, 
+        query, 
+        report_type="research_report", 
+        source_urls=None, 
+        config_path=None, 
+        websocket=None, 
+        prompt_token_limit: int=10000, 
+        total_words: int=1000, 
+    ):
         """
         Initialize the GPT Researcher class.
         Args:
@@ -23,7 +43,11 @@ class GPTResearcher:
         self.role = None
         self.report_type = report_type
         self.websocket = websocket
-        self.cfg = Config(config_path)
+        self.cfg = Config(
+            config_path, 
+            prompt_token_limit=prompt_token_limit, 
+            total_words=total_words
+        )
         self.retriever = get_retriever(self.cfg.retriever)
         self.context = []
         self.source_urls = source_urls
@@ -51,10 +75,34 @@ class GPTResearcher:
         if self.report_type == "custom_report":
             self.role = self.cfg.agent_role if self.cfg.agent_role else self.role
         await stream_output("logs", f"✍️ Writing {self.report_type} for research task: {self.query}...", self.websocket)
+        # Compress context
+        smart_token_total = 16385   # gpt-3.5
+        # smart_token_total = 8192  # gpt-4
+        prompt_token_limit = min(self.cfg.smart_token_max - self.cfg.total_words * 2, self.cfg.prompt_token_limit)
+        # total_words = 3000
+        buffer_tokens = 512
+        context_token_limit = prompt_token_limit - buffer_tokens
+        # text_splitter = TokenTextSplitter(chunk_size=context_token_limit, chunk_overlap=0)
+        # # print(type(self.context))
+        # context_str = text_splitter.split_text(str(self.context))[0]
+        while count_tokens(str(self.context)) > context_token_limit:
+            # self.context.pop(0)
+            self.context.pop(random.randrange(len(self.context)))
+        prompt_tokens = count_tokens(str(self.context)) + buffer_tokens
         report = await generate_report(query=self.query, context=self.context,
-                                       agent_role_prompt=self.role, report_type=self.report_type,
-                                       websocket=self.websocket, cfg=self.cfg)
+                                   agent_role_prompt=self.role, report_type=self.report_type,
+                                   websocket=self.websocket, cfg=self.cfg)
         time.sleep(2)
+        print(f"prompt_tokens: {prompt_tokens}")
+        print(f"total_words: {self.cfg.total_words}")
+        # print(report)
+        completion_tokens = count_tokens(report)
+        print(f"completion_tokens (report): {completion_tokens}")
+        await stream_output("usage", json.dumps({
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "smart_llm_model": self.cfg.smart_llm_model,
+        }), self.websocket)
         return report
 
     async def get_context_by_urls(self, urls):
@@ -141,5 +189,6 @@ class GPTResearcher:
         # Summarize Raw Data
         context_compressor = ContextCompressor(documents=pages, embeddings=self.memory.get_embeddings())
         # Run Tasks
+        return context_compressor.get_context(query, max_results=4)
         return context_compressor.get_context(query, max_results=8)
 

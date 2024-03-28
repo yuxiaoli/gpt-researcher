@@ -4,7 +4,7 @@ import datetime
 from typing import List, Dict
 from fastapi import WebSocket
 from gpt_researcher.master.agent import GPTResearcher
-
+import os
 
 class WebSocketManager:
     """Manage websockets"""
@@ -46,20 +46,38 @@ class WebSocketManager:
             del self.sender_tasks[websocket]
             del self.message_queues[websocket]
 
-    async def start_streaming(self, task, report_type, websocket):
+    async def start_streaming(self, task, report_type, websocket, source_urls: list=None, config_path: str=None, prompt_token_limit: int=10000, total_words: int=1000):
         """Start streaming the output."""
-        report = await run_agent(task, report_type, websocket)
+        report = await run_agent(task, report_type, websocket, source_urls, config_path, prompt_token_limit, total_words)
         return report
 
 
-async def run_agent(task, report_type, websocket):
+async def run_agent(task, report_type, websocket, source_urls: list=None, config_path: str=None, prompt_token_limit: int=10000, total_words: int=1000):
     """Run the agent."""
     # measure time
     start_time = datetime.datetime.now()
     # add customized JSON config file path here
-    config_path = None
+    # config_path = None
+    # config_path = os.path.join("configs", "config-low.json")
     # run agent
-    researcher = GPTResearcher(query=task, report_type=report_type, source_urls=None, config_path=config_path, websocket=websocket)
+    researcher = GPTResearcher(
+        query=task, 
+        report_type=report_type, 
+        # source_urls=None, 
+        source_urls=source_urls, 
+        config_path=config_path, 
+        websocket=websocket, 
+        prompt_token_limit=prompt_token_limit, 
+        total_words=total_words, 
+    )
+    print("STATUS")
+    print("=" * 24)
+    print(vars(researcher))
+    print(f"CONFIG (loading config from {config_path})")
+    print("=" * 24)
+    for key, value in vars(researcher.cfg).items():
+        print(f"{key}: {value}")
+    # return
     report = await researcher.run()
     # measure time
     end_time = datetime.datetime.now()
